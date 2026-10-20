@@ -104,6 +104,13 @@ final class Config {
     final List<RaceWeekend.Race> raceCalendar;
     /** Cinematic top shelf (config.xml, cinematic_home): the focused dock app's artwork behind a larger shelf. */
     final boolean cinematicHome;
+    /** Minutes between the built-in wallpapers (config.xml, builtin_wallpaper_minutes); 0 keeps them off. */
+    final int builtinWallpaperMinutes;
+    /** Weather on the shelf: the place shown, and where to ask Open-Meteo for; NaN coordinates keep it off. */
+    final String weatherPlace;
+    final double weatherLatitude;
+    final double weatherLongitude;
+    final boolean weatherFahrenheit;
 
     private Config(List<String> dockApps, boolean fillDock, List<String> hiddenApps, String liveTvPackage,
                    String liveTvAction, Map<String, String> launchActions, Map<String, String> appLabels,
@@ -114,7 +121,8 @@ final class Config {
                    int[] settingsKeycodes, boolean settingsKeyPanel, boolean wallpaperEnabled, File wallpaper, List<File> wallpapers,
                    int wallpaperRotationMinutes, int wallpaperDim, boolean overlayApplied,
                    Festival festival, int[] inputKeycodes, List<String> appKeys,
-                   List<RaceWeekend.Race> raceCalendar, boolean cinematicHome) {
+                   List<RaceWeekend.Race> raceCalendar, boolean cinematicHome, int builtinWallpaperMinutes,
+                   String weatherPlace, double weatherLatitude, double weatherLongitude, boolean weatherFahrenheit) {
         this.inputKeycodes = inputKeycodes;
         this.appKeys = Collections.unmodifiableList(appKeys);
         this.dockApps = Collections.unmodifiableList(dockApps);
@@ -156,6 +164,16 @@ final class Config {
         this.festival = festival;
         this.raceCalendar = Collections.unmodifiableList(raceCalendar);
         this.cinematicHome = cinematicHome;
+        this.builtinWallpaperMinutes = builtinWallpaperMinutes;
+        this.weatherPlace = weatherPlace;
+        this.weatherLatitude = weatherLatitude;
+        this.weatherLongitude = weatherLongitude;
+        this.weatherFahrenheit = weatherFahrenheit;
+    }
+
+    /** Weather is on when both coordinates are set and on the globe. */
+    boolean weatherEnabled() {
+        return Math.abs(weatherLatitude) <= 90 && Math.abs(weatherLongitude) <= 180;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -198,6 +216,11 @@ final class Config {
         int[] inputKeycodes = res.getIntArray(R.array.input_key_keycodes);
         List<String> appKeys = new ArrayList<>(Arrays.asList(res.getStringArray(R.array.app_keys)));
         boolean cinematic = res.getBoolean(R.bool.cinematic_home);
+        int builtinMinutes = res.getInteger(R.integer.builtin_wallpaper_minutes);
+        String weatherPlace = res.getString(R.string.weather_place).trim();
+        double latitude = coordinate(res.getString(R.string.weather_latitude));
+        double longitude = coordinate(res.getString(R.string.weather_longitude));
+        boolean fahrenheit = res.getBoolean(R.bool.weather_fahrenheit);
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -238,6 +261,11 @@ final class Config {
             inputKeycodes = intArray(json, "input_key_keycodes", inputKeycodes);
             appKeys = stringList(json, "app_keys", appKeys);
             cinematic = bool(json, "cinematic_home", cinematic);
+            builtinMinutes = integer(json, "builtin_wallpaper_minutes", builtinMinutes, 0, 24 * 60);
+            weatherPlace = string(json, "weather_place", weatherPlace);
+            latitude = number(json, "weather_latitude", latitude);
+            longitude = number(json, "weather_longitude", longitude);
+            fahrenheit = bool(json, "weather_fahrenheit", fahrenheit);
         }
         // A theme push or reset invalidates choices made on the TV. On first use, remember the
         // current theme without clearing choices from an older launcher version.
@@ -291,7 +319,8 @@ final class Config {
                 shamsi, greetingName, moduleCards, reducedMotion, dockTitle, dockRow, reorderButton, vpn, homeSettings, showStats, library, background,
                 Math.max(0, Math.min(100, skyIntensity)), settingsKeycodes, settingsKeyPanel, wallpaperEnabled, wallpaper,
                 wallpapers, rotationMinutes, wallpaperDim, applied,
-                festival, inputKeycodes, appKeys, json == null ? Collections.emptyList() : raceCalendar(json), cinematic);
+                festival, inputKeycodes, appKeys, json == null ? Collections.emptyList() : raceCalendar(json), cinematic,
+                Math.max(0, builtinMinutes), weatherPlace, latitude, longitude, fahrenheit);
     }
 
     /**
@@ -393,6 +422,20 @@ final class Config {
         if (!(v instanceof Number)) return fallback;
         int i = ((Number) v).intValue();
         return i < min || i > max ? fallback : i;
+    }
+
+    private static double number(JSONObject o, String key, double fallback) {
+        Object v = o.opt(key);
+        return v instanceof Number ? ((Number) v).doubleValue() : fallback;
+    }
+
+    /** A coordinate from config.xml, where there are no float resources; NaN when empty or not a number. */
+    private static double coordinate(String text) {
+        try {
+            return text.trim().isEmpty() ? Double.NaN : Double.parseDouble(text.trim());
+        } catch (NumberFormatException e) {
+            return Double.NaN;
+        }
     }
 
     private static int color(JSONObject o, String key, int fallback) {

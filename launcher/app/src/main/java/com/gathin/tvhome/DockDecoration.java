@@ -1,7 +1,11 @@
 package com.gathin.tvhome;
 
+import android.graphics.Bitmap;
+import android.graphics.BitmapShader;
 import android.graphics.Canvas;
+import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.Shader;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.view.View;
@@ -17,15 +21,41 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     private final Paint band = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint edge = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
+    /** The wallpaper, blurred (HeroArt.frost), drawn under the band so it reads as frosted glass. */
+    private final Paint frost = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private final Matrix frostMatrix = new Matrix();
+    private final int bandColor, edgeColor;
 
     /** @param translucent the cinematic shelf's band: the artwork and the glow show through it. */
     DockDecoration(int dockSize, float density, boolean translucent) {
         this.dockSize = dockSize;
         this.density = density;
-        band.setColor(translucent ? 0x8C121014 : 0xFF141416);
+        bandColor = translucent ? 0x8C121014 : 0xFF141416;
+        band.setColor(bandColor);
         edge.setStyle(Paint.Style.STROKE);
         edge.setStrokeWidth(density);
-        edge.setColor(translucent ? 0x26FFFFFF : 0x1FFFFFFF);
+        edgeColor = translucent ? 0x26FFFFFF : 0x1FFFFFFF;
+        edge.setColor(edgeColor);
+    }
+
+    /**
+     * Frosted glass over a wallpaper: the blurred picture, stretched over the screen like the wallpaper itself.
+     * The grid's canvas starts at (gridLeft, gridTop) on the screen. Null takes the frost away again.
+     */
+    void setFrost(Bitmap blurred, int screenW, int screenH, int gridLeft, int gridTop) {
+        if (blurred == null) {
+            frost.setShader(null);
+            band.setColor(bandColor);
+            edge.setColor(edgeColor);
+            return;
+        }
+        BitmapShader shader = new BitmapShader(blurred, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        frostMatrix.setScale(screenW / (float) blurred.getWidth(), screenH / (float) blurred.getHeight());
+        frostMatrix.postTranslate(-gridLeft, -gridTop);
+        shader.setLocalMatrix(frostMatrix);
+        frost.setShader(shader);
+        band.setColor(0x6B121018);   // the glass's tint over the frosted picture
+        edge.setColor(0x29FFFFFF);
     }
 
     @Override
@@ -63,6 +93,7 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
         float pad = 14 * density;
         rect.inset(-pad, -pad);
         float radius = 26 * density;
+        if (frost.getShader() != null) c.drawRoundRect(rect, radius, radius, frost);
         c.drawRoundRect(rect, radius, radius, band);
         c.drawRoundRect(rect, radius, radius, edge);
     }

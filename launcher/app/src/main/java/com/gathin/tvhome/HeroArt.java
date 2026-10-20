@@ -51,6 +51,31 @@ final class HeroArt {
         return out;
     }
 
+    /**
+     * Frosted glass for a still picture: the wallpaper reduced to 160×90 and smoothed, for the dock band to
+     * draw behind its tint. Made once per wallpaper, so the glass costs nothing while focus moves.
+     */
+    static Bitmap frost(Bitmap src) {
+        if (src == null) return null;
+        int fw = 160, fh = 90;
+        // Halve in filtered steps down to 4× the target, then once more twice: each step averages 2×2 pixels.
+        Bitmap step = Bitmap.createScaledBitmap(src, fw * 4, fh * 4, true);
+        Bitmap half = Bitmap.createScaledBitmap(step, fw * 2, fh * 2, true);
+        if (step != src) step.recycle();
+        Bitmap small = Bitmap.createScaledBitmap(half, fw, fh, true);
+        half.recycle();
+        int[] px = new int[fw * fh];
+        small.getPixels(px, 0, fw, 0, 0, fw, fh);
+        small.recycle();
+        for (int pass = 0; pass < 3; pass++) {
+            px = boxBlur(px, fw, fh, 2, true);
+            px = boxBlur(px, fw, fh, 2, false);
+        }
+        Bitmap out = Bitmap.createBitmap(fw, fh, Bitmap.Config.ARGB_8888);
+        out.setPixels(px, 0, fw, 0, 0, fw, fh);
+        return out;
+    }
+
     private static void saturate(int[] px) {
         for (int i = 0; i < px.length; i++) {
             int p = px[i];

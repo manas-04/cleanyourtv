@@ -103,4 +103,18 @@
     <string name="race_live">%1$s · בשידור חי</string>
     <string name="race_finished">הדגל המשובץ</string>
     <string name="last_opened">נפתח לאחרונה %1$s</string>
+    <string name="weather_clear">בהיר</string>
+    <string name="weather_mainly_clear">בהיר ברובו</string>
+    <string name="weather_partly_cloudy">מעונן חלקית</string>
+    <string name="weather_cloudy">מעונן</string>
+    <string name="weather_fog">ערפל</string>
+    <string name="weather_drizzle">טפטוף</string>
+    <string name="weather_rain">גשם</string>
+    <string name="weather_showers">ממטרים</string>
+    <string name="weather_snow">שלג</string>
+    <string name="weather_thunderstorm">סופת רעמים</string>
+    <string name="weather_feels_like">מורגש כמו %1$s</string>
+    <string name="weather_high_low">מקס׳ %1$s\u2002·\u2002מינ׳ %2$s</string>
+    <string name="weather_sunrise">זריחה %1$s</string>
+    <string name="weather_sunset">שקיעה %1$s</string>
 </resources>

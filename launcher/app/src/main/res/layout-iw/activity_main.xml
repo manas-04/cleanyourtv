@@ -152,6 +152,101 @@
             android:visibility="gone" />
     </LinearLayout>
 
+    <!-- Weather on the shelf (weather_latitude/longitude in config.xml), level with the shelf on the other side;
+         positioned and faded with the shelf in code. Gone while the weather is off or not known yet. -->
+    <LinearLayout
+        android:id="@+id/weather"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="left"
+        android:layout_marginStart="58dp"
+        android:gravity="left"
+        android:orientation="vertical"
+        android:alpha="0"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/weatherIcon"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginEnd="10dp"
+                android:importantForAccessibility="no" />
+
+            <TextView
+                android:id="@+id/weatherTemp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFFFF"
+                android:textSize="58sp"
+                android:fontFamily="@font/outfit_extralight"
+                android:letterSpacing="-0.03"
+                android:includeFontPadding="false"
+                android:shadowColor="#59000000"
+                android:shadowRadius="8"
+                android:singleLine="true" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/weatherCondition"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="#E6FFFFFF"
+            android:textSize="13.5sp"
+            android:fontFamily="@font/outfit_regular"
+            android:shadowColor="#59000000"
+            android:shadowRadius="8"
+            android:singleLine="true" />
+
+        <TextView
+            android:id="@+id/weatherDetails"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="#A6FFFFFF"
+            android:textSize="11sp"
+            android:fontFamily="@font/outfit_light"
+            android:letterSpacing="0.02"
+            android:shadowColor="#59000000"
+            android:shadowRadius="8"
+            android:singleLine="true" />
+
+        <!-- The next hours, one column each, filled in code. -->
+        <LinearLayout
+            android:id="@+id/weatherHours"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:paddingTop="7dp"
+            android:paddingBottom="7dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:background="@drawable/weather_hours_bg"
+            android:orientation="horizontal" />
+
+        <TextView
+            android:id="@+id/weatherPlace"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="9dp"
+            android:drawableRight="@drawable/ic_place"
+            android:drawablePadding="5dp"
+            android:drawableTint="#9EFFFFFF"
+            android:gravity="center_vertical"
+            android:textColor="#9EFFFFFF"
+            android:textSize="9sp"
+            android:fontFamily="@font/outfit_medium"
+            android:letterSpacing="0.22"
+            android:textAllCaps="true"
+            android:singleLine="true" />
+    </LinearLayout>
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"

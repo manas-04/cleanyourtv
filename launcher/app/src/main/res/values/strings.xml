@@ -107,4 +107,20 @@
     <!-- Cinematic top shelf (cinematic_home): the line under the focused dock app's name; %1$s is when it was
          last opened, e.g. "5 minutes ago" or "yesterday, 9:40 pm". -->
     <string name="last_opened">Last opened %1$s</string>
+    <!-- Weather on the shelf (weather_latitude/longitude in config.xml). -->
+    <string name="weather_clear">Clear</string>
+    <string name="weather_mainly_clear">Mainly clear</string>
+    <string name="weather_partly_cloudy">Partly cloudy</string>
+    <string name="weather_cloudy">Cloudy</string>
+    <string name="weather_fog">Fog</string>
+    <string name="weather_drizzle">Drizzle</string>
+    <string name="weather_rain">Rain</string>
+    <string name="weather_showers">Showers</string>
+    <string name="weather_snow">Snow</string>
+    <string name="weather_thunderstorm">Thunderstorm</string>
+    <string name="weather_feels_like">Feels like %1$s</string>
+    <string name="weather_joined" translatable="false">%1$s\u2002·\u2002%2$s</string>
+    <string name="weather_high_low">H %1$s\u2002·\u2002L %2$s</string>
+    <string name="weather_sunrise">Sunrise %1$s</string>
+    <string name="weather_sunset">Sunset %1$s</string>
 </resources>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Weather icon for the shelf (Weather.icon), white line art on a 48 grid. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:pathData="M17,10a6,6 0,1 0,0 12a6,6 0,1 0,0 -12z" android:strokeColor="#FFFFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path android:pathData="M17,3v3M7,16H4M9.9,8.9l-2.1,-2.1M24.1,8.9l2.1,-2.1M9.9,23.1l-2.1,2.1" android:strokeColor="#FFFFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path android:pathData="M14,41h20a8,8 0,0 0,0 -16a11,11 0,0 0,-20.5 3.5A6.3,6.3 0,0 0,14 41z" android:fillColor="#CC1D1A2B" android:strokeColor="#FFFFFFFF" android:strokeWidth="2.6" android:strokeLineJoin="round" />
+</vector>

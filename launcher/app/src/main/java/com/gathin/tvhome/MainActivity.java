@@ -82,6 +82,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TimeZone;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * tvOS style home: black, a pinned dock row, an app grid, and one glass highlight that springs between tiles.
@@ -123,6 +126,31 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private String heroArtKey;
     /** The focus glow's colour while the cinematic shelf tints it, 0 for plain white glass. */
     private int glassAccent;
+    /** The picture behind everything: a theme's wallpaper.jpg, or the built-in set (builtin_wallpaper_minutes). */
+    private ImageView wallpaperView;
+    private List<String> wallpaperSet = Collections.emptyList();
+    private int rotationMinutes;
+    private int wallpaperIndex = -1;
+    /** The wallpaper, blurred, for the dock's frosted glass (cinematic shelf only). */
+    private Bitmap wallpaperFrost;
+    private DockDecoration dockDecoration;
+    /** While the grid is browsed the wallpaper dims, so the tiles stand out. */
+    private static final float WALLPAPER_DIM_ALPHA = 0.62f;
+    /** Weather on the shelf (config.xml, weather_latitude/longitude); null while it is off. */
+    private WeatherPanel weatherPanel;
+    private Weather weather;
+    private String weatherKey;
+    private double weatherLatitude, weatherLongitude;
+    private boolean weatherFahrenheit;
+    private boolean weatherLoading;
+    /** When the last request went out; static so a recreate() does not ask again at once. */
+    private static long lastWeatherAttempt;
+    /** Where the dock was on the last shelf, so the weather can line up with it when it arrives later. */
+    private float lastDockTop;
+    /** Decoding wallpapers, off the main thread. */
+    private final ExecutorService background = Executors.newSingleThreadExecutor();
+    /** Asking for the weather, on its own thread so a slow answer never holds up a wallpaper. */
+    private final ExecutorService weatherThread = Executors.newSingleThreadExecutor();
     private int ambientColor = -1;
     private ValueAnimator ambientAnimator;
     private boolean heroShown;
@@ -264,6 +292,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             updateWifiLabel();
             sky.update();
             wallpaperPlayer.update();
+            rotateWallpaper(true);
+            refreshWeather();
             handler.postDelayed(this, MINUTE_MS);
         }
     };
@@ -293,6 +323,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         root = findViewById(R.id.root);
         root.setBackgroundColor(cfg.backgroundColor);
         wallpaperPlayer = new WallpaperPlayer(this, root, cfg);
+        cinematic = cfg.cinematicHome;
+        setUpWallpaper(cfg);
         sky = findViewById(R.id.sky);
         sky.setIntensity(cfg.skyIntensity);
         glass = findViewById(R.id.glass);
@@ -309,11 +341,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         heroMeta = findViewById(R.id.heroMeta);
         heroDots = findViewById(R.id.heroDots);
         heroArt = findViewById(R.id.heroArt);
-        cinematic = cfg.cinematicHome;
         if (cinematic) setUpCinematicShelf();
         // dock_title false: the name above the dock (and the cinematic lines under it) never shows; the glow
         // still follows the dock.
         if (!cfg.dockTitle) hero.setVisibility(View.GONE);
+        if (cfg.weatherEnabled()) setUpWeather(cfg);
         greeting = findViewById(R.id.greeting);
         greetingColor = greeting.getCurrentTextColor();
         btnWifi = findViewById(R.id.btnWifi);
@@ -393,7 +425,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void onChildViewDetachedFromWindow(@NonNull View v) {
             }
         });
-        if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic));
+        if (dockRow) {
+            dockDecoration = new DockDecoration(COLUMNS, density, cinematic);
+            grid.addItemDecoration(dockDecoration);
+        }
         if (animations) {
             int enterAnim = reducedMotion ? R.anim.tile_enter_reduced : R.anim.tile_enter;
             float enterDelay = reducedMotion ? 0f : 0.06f;
@@ -432,6 +467,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // Cold start or column count > 4: the first focus can run before the grid has its final width or
             // padding, leaving the glass at the XML design size until a key is pressed.
             grid.post(this::refitGlass);
+            if (wallpaperFrost != null) updateFrost();
         });
 
         // Keep the glass glued to its tile while the grid scrolls.
@@ -550,6 +586,173 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     /**
+     * The built-in set (builtin_wallpaper_minutes) when the theme brings no wallpaper of its own: a theme's
+     * wallpaper.jpg or wallpapers/ folder is WallpaperPlayer's, and wins.
+     */
+    private void setUpWallpaper(Config cfg) {
+        if (cfg.wallpaperEnabled && !cfg.wallpapers.isEmpty()) return;
+        if (cfg.builtinWallpaperMinutes > 0) {
+            wallpaperSet = Wallpapers.list(this);
+            rotationMinutes = cfg.builtinWallpaperMinutes;
+            rotateWallpaper(false);
+        }
+    }
+
+    /**
+     * The full-screen picture behind everything, decoded at the size CENTER_CROP shows (one screen-sized
+     * RGB_565 bitmap, the price of a wallpaper on a 1 GB TV). On the cinematic shelf the dock's glass is a
+     * blur of it; pass that blur when it was made off the main thread, or null to make it here.
+     */
+    private void showWallpaper(Bitmap bmp, Bitmap frost) {
+        if (bmp == null) return;
+        if (wallpaperView == null) {
+            wallpaperView = new ImageView(this);
+            wallpaperView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            // One bitmap: apply its alpha (the dim while the grid is browsed) while drawing it.
+            wallpaperView.forceHasOverlappingRendering(false);
+            root.addView(wallpaperView, 0, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        wallpaperView.setImageBitmap(bmp);
+        if (cinematic) {
+            wallpaperFrost = frost != null ? frost : HeroArt.frost(bmp);
+            updateFrost();
+        }
+    }
+
+    /**
+     * Shows the built-in wallpaper that is due now, when it is not the one on screen. At start it is decoded
+     * here, so Home never opens without it; later it is decoded in the background and crossfaded in.
+     */
+    private void rotateWallpaper(boolean crossfade) {
+        if (wallpaperSet.isEmpty() || rotationMinutes <= 0) return;
+        long now = System.currentTimeMillis();
+        int due = Wallpapers.due(now, TimeZone.getDefault().getOffset(now), rotationMinutes, wallpaperSet.size());
+        if (due == wallpaperIndex) return;
+        wallpaperIndex = due;
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        Wallpapers.Source source = Wallpapers.asset(this, wallpaperSet.get(due));
+        if (!crossfade || wallpaperView == null) {
+            showWallpaper(Wallpapers.decode(source, dm.widthPixels, dm.heightPixels), null);
+            return;
+        }
+        final boolean frosted = cinematic;
+        background.execute(() -> {
+            Bitmap bmp = Wallpapers.decode(source, dm.widthPixels, dm.heightPixels);
+            Bitmap frost = frosted && bmp != null ? HeroArt.frost(bmp) : null;
+            handler.post(() -> {
+                if (bmp == null || isDestroyed()) return;
+                if (!animations) {
+                    showWallpaper(bmp, frost);
+                    return;
+                }
+                wallpaperView.animate().cancel();
+                wallpaperView.animate().alpha(0f).setDuration(300).withEndAction(() -> {
+                    showWallpaper(bmp, frost);
+                    wallpaperView.animate().alpha(wallpaperAlpha()).setDuration(600).start();
+                }).start();
+            });
+        });
+    }
+
+    /** Full brightness behind the shelf, dimmed while the grid is browsed (cinematic shelf only). */
+    private float wallpaperAlpha() {
+        return cinematic && !heroShown ? WALLPAPER_DIM_ALPHA : 1f;
+    }
+
+    private void fadeWallpaper() {
+        if (wallpaperView == null || !cinematic) return;
+        wallpaperView.animate().cancel();
+        if (!animations) wallpaperView.setAlpha(wallpaperAlpha());
+        else wallpaperView.animate().alpha(wallpaperAlpha()).setDuration(reducedMotion ? 140 : 300).start();
+    }
+
+    /** Lines the dock's frosted glass up with the wallpaper: the grid's canvas starts where the grid sits on screen. */
+    private void updateFrost() {
+        if (dockDecoration == null || root.getWidth() == 0) return;
+        if (wallpaperFrost == null) {
+            dockDecoration.setFrost(null, 0, 0, 0, 0);
+        } else {
+            Rect at = new Rect(0, 0, grid.getWidth(), grid.getHeight());
+            root.offsetDescendantRectToMyCoords(grid, at);
+            dockDecoration.setFrost(wallpaperFrost, root.getWidth(), root.getHeight(), at.left, at.top);
+        }
+        grid.invalidate();
+    }
+
+    // ---- weather ---------------------------------------------------------------------------------
+
+    private void setUpWeather(Config cfg) {
+        weatherLatitude = cfg.weatherLatitude;
+        weatherLongitude = cfg.weatherLongitude;
+        weatherFahrenheit = cfg.weatherFahrenheit;
+        weatherKey = Weather.key(weatherLatitude, weatherLongitude, weatherFahrenheit);
+        weatherPanel = new WeatherPanel(this, cfg.weatherPlace);
+        // The last answer, so the weather is on the first frame; a fresh one follows when it is due.
+        weather = Weather.load(this, weatherKey);
+        weatherPanel.bind(weather);
+    }
+
+    /** Redraws the weather (the next hours move on with the clock) and asks for a new forecast once an hour. */
+    private void refreshWeather() {
+        if (weatherPanel == null) return;
+        bindWeather();
+        long now = System.currentTimeMillis();
+        if (weatherLoading || (weather != null && now - weather.fetchedAt < Weather.REFRESH_MS)) return;
+        if (now - lastWeatherAttempt < 10 * 60_000L) return;   // after a failure, try again ten minutes later
+        lastWeatherAttempt = now;
+        weatherLoading = true;
+        final String key = weatherKey;
+        final double latitude = weatherLatitude, longitude = weatherLongitude;
+        final boolean fahrenheit = weatherFahrenheit;
+        final Context app = getApplicationContext();
+        weatherThread.execute(() -> {
+            Weather fresh = null;
+            try {
+                fresh = Weather.fetch(latitude, longitude, fahrenheit);
+                fresh.save(app, key);
+            } catch (Exception ignored) {
+                // Offline or the service is down: the last answer stays until it is too old to show.
+            }
+            final Weather got = fresh;
+            handler.post(() -> {
+                weatherLoading = false;
+                if (got == null || isDestroyed()) return;
+                weather = got;
+                bindWeather();
+            });
+        });
+    }
+
+    private void bindWeather() {
+        weatherPanel.bind(weather);
+        // Its height may have changed (the next hours, a line more or less): place it once it is laid out.
+        if (heroShown) weatherPanel.panel.post(() -> showWeather(lastDockTop));
+    }
+
+    /** The weather sits level with the shelf on the other side of the screen and comes and goes with it. */
+    private void showWeather(float dockTopInRoot) {
+        if (weatherPanel == null || weatherPanel.panel.getVisibility() != View.VISIBLE) return;
+        View panel = weatherPanel.panel;
+        float y = dockTopInRoot - 14 * density - 26 * density - panel.getHeight();
+        // Never up into the top bar, whatever the dock position.
+        View bar = findViewById(R.id.topButtons);
+        Rect barRect = new Rect(0, 0, bar.getWidth(), bar.getHeight());
+        root.offsetDescendantRectToMyCoords(bar, barRect);
+        panel.setY(Math.max(y, barRect.bottom + 12 * density));
+        panel.animate().cancel();
+        if (!animations) panel.setAlpha(1f);
+        else if (panel.getAlpha() < 1f) panel.animate().alpha(1f).setDuration(reducedMotion ? 100 : 260).start();
+    }
+
+    private void hideWeather() {
+        if (weatherPanel == null) return;
+        View panel = weatherPanel.panel;
+        panel.animate().cancel();
+        if (animations) panel.animate().alpha(0f).setDuration(reducedMotion ? 100 : 160).start();
+        else panel.setAlpha(0f);
+    }
+
+    /**
      * Home pressed while Home is already in front: singleTask delivers it here, then onResume runs.
      * Back to the top with the first dock tile focused, like the stock launcher. Back from an app
      * never comes this way, so returning to the app you left from is unchanged (#118).
@@ -596,6 +799,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (showStats) startStats();
         sky.update();
         wallpaperPlayer.start();
+        rotateWallpaper(true);
+        refreshWeather();
         handler.postDelayed(minuteTick, MINUTE_MS);
         if (festive && diya != null) {
             diya.start();
@@ -632,6 +837,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             ambient.setAlpha(0f);
             heroArt.animate().cancel();
             heroArt.setAlpha(0f);
+            if (weatherPanel != null) weatherPanel.panel.setAlpha(0f);
         }
         reloadTiles();
         if (animate && animations && !reducedMotion) grid.scheduleLayoutAnimation();
@@ -698,6 +904,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         hero.animate().cancel();
         ambient.animate().cancel();
         heroArt.animate().cancel();
+        if (weatherPanel != null) weatherPanel.panel.animate().cancel();
         handler.removeCallbacks(minuteTick);
         stopStats();
         if (diya != null) diya.stop();
@@ -728,6 +935,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onDestroy() {
         super.onDestroy();
         wallpaperPlayer.close();
+        background.shutdownNow();
+        weatherThread.shutdownNow();
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (tim != null) tim.unregisterCallback(inputCallback);
@@ -1144,7 +1353,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int color = adapter.ambientColorAt(position);
         float y = dockTopInRoot - 14 * density - 26 * density - hero.getHeight();
         boolean changed = !label.contentEquals(heroName.getText());
-        if (cinematic) showHeroArt(position);
+        // Over a wallpaper the picture is the backdrop; the app's colour stays as a light tint.
+        if (cinematic && wallpaperView == null) showHeroArt(position);
+        lastDockTop = dockTopInRoot;
+        showWeather(dockTopInRoot);
+        boolean wasShown = heroShown;
 
         if (!animations || reducedMotion) {
             // Snap the shelf instead of sliding and fading it: each of those frames repaints the
@@ -1164,6 +1377,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 ambient.animate().alpha(1f).setDuration(160).start();
                 heroShown = true;
             }
+            if (!wasShown) fadeWallpaper();
             return;
         }
 
@@ -1178,6 +1392,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             setAmbient(color);
             ambient.animate().alpha(1f).setDuration(600).start();
             heroShown = true;
+            fadeWallpaper();
         } else if (changed) {
             if (advancedEffects) hero.animate().cancel();
             hero.animate().alpha(0f).translationX(-12 * density).setDuration(120).withEndAction(() -> {
@@ -1219,27 +1434,41 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // One stretched bitmap: apply its alpha while drawing instead of through an offscreen buffer.
         heroArt.forceHasOverlappingRendering(false);
         View scrim = findViewById(R.id.heroScrim);
-        scrim.setBackground(scrimDrawable());
+        scrim.setBackground(scrimDrawable(wallpaperView != null));
         scrim.setVisibility(View.VISIBLE);
     }
 
     /**
      * Darkens the side the shelf's text is on and the lower part of the screen, so the name, the dock and
-     * the grid stay readable over the artwork. One small bitmap stretched over the screen, like the glow.
+     * the grid stay readable over the artwork. Over a wallpaper it is lighter, so the picture shows, and it
+     * also shades the weather's side. One small bitmap stretched over the screen, like the glow.
      */
-    private Drawable scrimDrawable() {
+    private Drawable scrimDrawable(boolean wallpaper) {
         int w = 480, h = 270;
         Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bmp);
         boolean rtl = getResources().getBoolean(R.bool.rtl_menu_bar);
         Paint paint = new Paint();
-        paint.setShader(new LinearGradient(rtl ? w : 0, 0, rtl ? 0 : w, 0,
-                new int[]{0xD1060406, 0x59060406, 0x00060406}, new float[]{0f, 0.42f, 0.7f}, Shader.TileMode.CLAMP));
-        canvas.drawRect(0, 0, w, h, paint);
-        paint.setShader(new LinearGradient(0, 0, 0, h,
-                new int[]{0x00060406, 0x00060406, 0xDB060406, 0xFF060406}, new float[]{0f, 0.28f, 0.58f, 0.76f},
-                Shader.TileMode.CLAMP));
-        canvas.drawRect(0, 0, w, h, paint);
+        if (wallpaper) {
+            paint.setShader(new LinearGradient(rtl ? w : 0, 0, rtl ? 0 : w, 0,
+                    new int[]{0x9E040408, 0x38040408, 0x00040408}, new float[]{0f, 0.38f, 0.55f}, Shader.TileMode.CLAMP));
+            canvas.drawRect(0, 0, w, h, paint);
+            paint.setShader(new RadialGradient(w * (rtl ? 0.08f : 0.92f), h * 0.44f, w * 0.34f,
+                    new int[]{0x6B040408, 0x00040408}, null, Shader.TileMode.CLAMP));
+            canvas.drawRect(0, 0, w, h, paint);
+            paint.setShader(new LinearGradient(0, 0, 0, h,
+                    new int[]{0x2E040408, 0x00040408, 0x00040408, 0x8C040408, 0xDB040408},
+                    new float[]{0f, 0.22f, 0.42f, 0.66f, 1f}, Shader.TileMode.CLAMP));
+            canvas.drawRect(0, 0, w, h, paint);
+        } else {
+            paint.setShader(new LinearGradient(rtl ? w : 0, 0, rtl ? 0 : w, 0,
+                    new int[]{0xD1060406, 0x59060406, 0x00060406}, new float[]{0f, 0.42f, 0.7f}, Shader.TileMode.CLAMP));
+            canvas.drawRect(0, 0, w, h, paint);
+            paint.setShader(new LinearGradient(0, 0, 0, h,
+                    new int[]{0x00060406, 0x00060406, 0xDB060406, 0xFF060406}, new float[]{0f, 0.28f, 0.58f, 0.76f},
+                    Shader.TileMode.CLAMP));
+            canvas.drawRect(0, 0, w, h, paint);
+        }
         BitmapDrawable scrim = new BitmapDrawable(getResources(), bmp);
         scrim.setGravity(Gravity.FILL);
         return scrim;
@@ -1342,10 +1571,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (cinematic) {
                 // Higher and stronger, from the corner away from the shelf's text: the app's colour floods
                 // the top of the screen over its artwork, and the scrim keeps the text side dark.
+                // Over a wallpaper it is only a tint, so the picture keeps its own colours.
                 boolean rtl = getResources().getBoolean(R.bool.rtl_menu_bar);
+                boolean tint = wallpaperView != null;
                 paint.setShader(new RadialGradient(
-                        w * (rtl ? 0.20f : 0.80f), h * 0.06f, w * 0.78f,
-                        new int[]{0xA6FFFFFF, 0x47FFFFFF, 0x00FFFFFF},
+                        w * (rtl ? 0.20f : 0.80f), h * 0.06f, w * (tint ? 0.62f : 0.78f),
+                        tint ? new int[]{0x4DFFFFFF, 0x1CFFFFFF, 0x00FFFFFF} : new int[]{0xA6FFFFFF, 0x47FFFFFF, 0x00FFFFFF},
                         new float[]{0f, 0.5f, 1f},
                         Shader.TileMode.CLAMP));
             } else {
@@ -1422,6 +1653,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ambient.animate().cancel();
         heroArt.animate().cancel();
         heroShown = false;
+        hideWeather();
+        fadeWallpaper();
         if (animations) {
             hero.animate().alpha(0f).setDuration(reducedMotion ? 100 : 160).start();
             ambient.animate().alpha(0f).setDuration(reducedMotion ? 140 : 300).start();
