@@ -164,10 +164,11 @@
          wallpapers/ folder wins over the set. A theme can set "builtin_wallpaper_minutes". -->
     <integer name="builtin_wallpaper_minutes">0</integer>
 
-    <!-- Weather on the shelf, from Open-Meteo (open-meteo.com, free, no account): the launcher sends only these
-         coordinates, about once an hour, and keeps the last answer so Home shows it at once. Empty
-         coordinates keep the weather off and the launcher off the network. A theme can set "weather_place",
-         "weather_latitude", "weather_longitude" and "weather_fahrenheit". -->
+    <!-- Weather on the shelf, from Open-Meteo (open-meteo.com, free, no account): the launcher sends only the
+         coordinates below, about once an hour, and keeps the last answer so Home shows it at once. It needs
+         weather true and both coordinates; while either is missing the launcher stays off the network. A theme
+         can set "weather", "weather_place", "weather_latitude", "weather_longitude" and "weather_fahrenheit". -->
+    <bool name="weather">false</bool>
     <string name="weather_place" translatable="false"></string>
     <string name="weather_latitude" translatable="false"></string>
     <string name="weather_longitude" translatable="false"></string>

@@ -106,7 +106,9 @@ final class Config {
     final boolean cinematicHome;
     /** Minutes between the built-in wallpapers (config.xml, builtin_wallpaper_minutes); 0 keeps them off. */
     final int builtinWallpaperMinutes;
-    /** Weather on the shelf: the place shown, and where to ask Open-Meteo for; NaN coordinates keep it off. */
+    /** Weather on the shelf (config.xml, weather): off by default; on, it also needs both coordinates. */
+    final boolean weather;
+    /** The place shown, and where to ask Open-Meteo for. */
     final String weatherPlace;
     final double weatherLatitude;
     final double weatherLongitude;
@@ -122,7 +124,7 @@ final class Config {
                    int wallpaperRotationMinutes, int wallpaperDim, boolean overlayApplied,
                    Festival festival, int[] inputKeycodes, List<String> appKeys,
                    List<RaceWeekend.Race> raceCalendar, boolean cinematicHome, int builtinWallpaperMinutes,
-                   String weatherPlace, double weatherLatitude, double weatherLongitude, boolean weatherFahrenheit) {
+                   boolean weather, String weatherPlace, double weatherLatitude, double weatherLongitude, boolean weatherFahrenheit) {
         this.inputKeycodes = inputKeycodes;
         this.appKeys = Collections.unmodifiableList(appKeys);
         this.dockApps = Collections.unmodifiableList(dockApps);
@@ -165,15 +167,16 @@ final class Config {
         this.raceCalendar = Collections.unmodifiableList(raceCalendar);
         this.cinematicHome = cinematicHome;
         this.builtinWallpaperMinutes = builtinWallpaperMinutes;
+        this.weather = weather;
         this.weatherPlace = weatherPlace;
         this.weatherLatitude = weatherLatitude;
         this.weatherLongitude = weatherLongitude;
         this.weatherFahrenheit = weatherFahrenheit;
     }
 
-    /** Weather is on when both coordinates are set and on the globe. */
+    /** Weather is on when the weather flag is set and both coordinates are on the globe. */
     boolean weatherEnabled() {
-        return Math.abs(weatherLatitude) <= 90 && Math.abs(weatherLongitude) <= 180;
+        return weather && Math.abs(weatherLatitude) <= 90 && Math.abs(weatherLongitude) <= 180;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -217,6 +220,7 @@ final class Config {
         List<String> appKeys = new ArrayList<>(Arrays.asList(res.getStringArray(R.array.app_keys)));
         boolean cinematic = res.getBoolean(R.bool.cinematic_home);
         int builtinMinutes = res.getInteger(R.integer.builtin_wallpaper_minutes);
+        boolean weather = res.getBoolean(R.bool.weather);
         String weatherPlace = res.getString(R.string.weather_place).trim();
         double latitude = coordinate(res.getString(R.string.weather_latitude));
         double longitude = coordinate(res.getString(R.string.weather_longitude));
@@ -262,6 +266,7 @@ final class Config {
             appKeys = stringList(json, "app_keys", appKeys);
             cinematic = bool(json, "cinematic_home", cinematic);
             builtinMinutes = integer(json, "builtin_wallpaper_minutes", builtinMinutes, 0, 24 * 60);
+            weather = bool(json, "weather", weather);
             weatherPlace = string(json, "weather_place", weatherPlace);
             latitude = number(json, "weather_latitude", latitude);
             longitude = number(json, "weather_longitude", longitude);
@@ -320,7 +325,7 @@ final class Config {
                 Math.max(0, Math.min(100, skyIntensity)), settingsKeycodes, settingsKeyPanel, wallpaperEnabled, wallpaper,
                 wallpapers, rotationMinutes, wallpaperDim, applied,
                 festival, inputKeycodes, appKeys, json == null ? Collections.emptyList() : raceCalendar(json), cinematic,
-                Math.max(0, builtinMinutes), weatherPlace, latitude, longitude, fahrenheit);
+                Math.max(0, builtinMinutes), weather, weatherPlace, latitude, longitude, fahrenheit);
     }
 
     /**

@@ -20,7 +20,7 @@ Built and tested on a TCL 43S5K (G13, Google TV 14, MediaTek MT9221, 1 GB RAM).
 
 ## Network and data
 
-The weather is the only network access, and it is off until you set coordinates. When it is on, the launcher
+The weather is the only network access, and it is off until you set `weather` to true and give coordinates. When it is on, the launcher
 asks [Open-Meteo](https://open-meteo.com) (free, no account, no key) about once an hour:
 
 ```
@@ -39,6 +39,7 @@ All of it is off by default. In `launcher/app/src/main/res/values/config.xml`, o
 {
   "cinematic_home": true,
   "builtin_wallpaper_minutes": 60,
+  "weather": true,
   "weather_place": "London",
   "weather_latitude": 51.5074,
   "weather_longitude": -0.1278,
