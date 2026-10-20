@@ -71,6 +71,7 @@
          settings panel) on scancode 240 (KEY_UNKNOWN), the scancode several TCL buttons share. Find the keycode
          with `tools/tv.py 'logcat -v time -s InputReader:D'` while pressing the button. Leave empty to omit. -->
     <integer-array name="settings_key_keycodes">
+        <item>83</item>
     </integer-array>
     <!-- What those Settings buttons open: false, the TV's Settings; true, a small glass panel at the top right
          with TV settings, Display, Network, Apps (re-enable an app) and Launcher settings, over whatever is on screen.
@@ -158,17 +159,17 @@
          colour; the shelf gets a larger name, a "Last opened" line (from the apps Home opened) and dock position
          dots, the focus glow takes the app's colour and the dock band turns translucent. false keeps the plain
          shelf. Can also be set with "cinematic_home": true in a theme's config.json. -->
-    <bool name="cinematic_home">false</bool>
+    <bool name="cinematic_home">true</bool>
     <!-- Built-in wallpapers (assets/wallpapers): a new one every this many minutes, in order, the same picture
          on every Home start within that time. 0 keeps the plain background. A theme's own wallpaper.jpg or
          wallpapers/ folder wins over the set. A theme can set "builtin_wallpaper_minutes". -->
-    <integer name="builtin_wallpaper_minutes">0</integer>
+    <integer name="builtin_wallpaper_minutes">60</integer>
 
     <!-- Weather on the shelf, from Open-Meteo (open-meteo.com, free, no account): the launcher sends only the
          coordinates below, about once an hour, and keeps the last answer so Home shows it at once. It needs
          weather true and both coordinates; while either is missing the launcher stays off the network. A theme
          can set "weather", "weather_place", "weather_latitude", "weather_longitude" and "weather_fahrenheit". -->
-    <bool name="weather">false</bool>
+    <bool name="weather">true</bool>
     <string name="weather_place" translatable="false"></string>
     <string name="weather_latitude" translatable="false"></string>
     <string name="weather_longitude" translatable="false"></string>

@@ -124,6 +124,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private final Map<String, Bitmap> heroArtCache = new HashMap<>();
     /** The app whose artwork heroArt shows, so focusing it again only fades it back in. */
     private String heroArtKey;
+    private final LastOpened lastOpened = new LastOpened();
     /** The focus glow's colour while the cinematic shelf tints it, 0 for plain white glass. */
     private int glassAccent;
     /** The picture behind everything: a theme's wallpaper.jpg, or the built-in set (builtin_wallpaper_minutes). */
@@ -787,6 +788,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return;
         }
         promptsPaused = false;
+        if (cinematic) lastOpened.refresh(this);
         if (rebuildOnResume) {
             tilesReady = false;
             reloadApps(true);
@@ -1508,7 +1510,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** "Last opened yesterday, 9:40 PM", the time in white; nothing (but the same height) when it was never seen. */
     private void updateHeroMeta(int position) {
-        long when = LastOpened.get(this, adapter.packageAt(position));
+        long when = lastOpened.get(this, adapter.packageAt(position));
         if (when <= 0) {
             heroMeta.setVisibility(View.INVISIBLE);
             return;

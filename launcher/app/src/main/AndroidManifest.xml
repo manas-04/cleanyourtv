@@ -17,6 +17,11 @@
          FINE" rule does not apply here. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
         tools:ignore="CoarseFineLocation" />
+    <!-- The cinematic shelf's "Last opened" line reads Android's usage statistics, so apps opened with the
+         remote's own buttons count too. Allowed by build-and-install with appops, never requested; without
+         it the launcher falls back to its own record of the apps it opened. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
 
     <!-- Android 11+ package visibility: lets the launcher list the TV apps it shows as tiles, and the
          apps that declare a module card (docs/specs/card.md). -->
